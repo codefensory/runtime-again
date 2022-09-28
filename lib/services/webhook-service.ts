@@ -1,6 +1,10 @@
 import { Stat } from "../runtime-again";
 
-export async function appCrashWebhook(error: string, stats: Stat[]) {
+export async function appCrashWebhook(params: {
+  error: string;
+  stats: Stat[];
+  attempt: number;
+}) {
   const serversUrl = process.env.APP_CRASH_ENDPOINTS;
 
   if (!!!serversUrl) {
@@ -12,8 +16,9 @@ export async function appCrashWebhook(error: string, stats: Stat[]) {
     body: JSON.stringify({
       type: "app_crash",
       title: "Application Crash",
-      error,
-      stats,
+      error: params.error,
+      stats: params.stats,
+      attempt: params.attempt,
     }),
   };
 

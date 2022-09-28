@@ -31,13 +31,7 @@ class RuntimeAgain {
     }
 
     const child = spawn("node", commandSplit, {
-      env: Object.assign(
-        {},
-        {
-          DEBUG_COLORS: 1,
-        },
-        process.env
-      ),
+      env: Object.assign({ DEBUG_COLORS: 1 }, process.env),
     });
 
     child.stdout.pipe(process.stdout, { end: false });
@@ -71,7 +65,11 @@ class RuntimeAgain {
       logger("-------------");
 
       // send crash to webhooks
-      appCrashWebhook(error, pidHistory.get());
+      appCrashWebhook({
+        error,
+        stats: pidHistory.get(),
+        attempt: this.attempt,
+      });
 
       // Clear intervals
       clearInterval(statsInterval);
