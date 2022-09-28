@@ -1,4 +1,4 @@
-import { spawn } from "child_process";
+import { ChildProcessWithoutNullStreams, spawn } from "child_process";
 import { appCrashWebhook } from "./services";
 import { HistoryLimit } from "./utils/historyLimit";
 import debug from "debug";
@@ -18,8 +18,8 @@ export interface Stat {
 
 class RuntimeAgain {
   private attempt = 0;
-  private maxAttempt = 10;
-  private restartRetryInterval = 5000;
+  private maxAttempt = 5;
+  private restartRetryInterval = 60000;
 
   startNode(command: string, isRestart: boolean = false) {
     logger(isRestart ? "App restarted" : "App started");
@@ -40,9 +40,68 @@ class RuntimeAgain {
       ),
     });
 
-    const pidHistory = new HistoryLimit<Stat>(60);
+    child.stdout.pipe(process.stdout, { end: false });
 
-    const usageInterval = setInterval(() => {
+    // Start watch stats
+    const pidHistory = new HistoryLimit<Stat>(75);
+    const statsInterval = this.startWatchStats(child, pidHistory);
+
+    // Listen stderr and save history
+    const history = new HistoryLimit<string>(
+      parseInt(process.env.HISTORY_LENGTH ?? "5")
+    );
+    child.stderr.on("data", (data) => this.customStderr(data, history));
+
+    // Start restart attempt
+    const restartAttemptsTimeout = this.restartAttemptsTimeout();
+
+    child.on("close", async (code) => {
+      logger(`Exit child process with code ${code}`);
+
+      const error = history.get().join("\n");
+
+      // Print errors
+      logger("--- errors ---");
+      logger(error);
+      logger("--------------");
+
+      // Print stats
+      logger("--- stats ---");
+      logger(JSON.stringify(pidHistory.get(), null, "   "));
+      logger("-------------");
+
+      // send crash to webhooks
+      appCrashWebhook(error, pidHistory.get());
+
+      // Clear intervals
+      clearInterval(statsInterval);
+      clearInterval(restartAttemptsTimeout);
+
+      if (this.attempt >= this.maxAttempt) {
+        setTimeout(() => {
+          this.attempt = 0;
+
+          this.startNode(command, true);
+        }, this.restartRetryInterval);
+
+        return;
+      }
+
+      this.attempt += 1;
+
+      this.startNode(command, true);
+    });
+  }
+
+  private restartAttemptsTimeout() {
+    return setTimeout(() => (this.attempt = 0), 20000);
+  }
+
+  private startWatchStats(
+    child: ChildProcessWithoutNullStreams,
+    history: HistoryLimit<Stat>
+  ) {
+    return setInterval(() => {
       if (child.pid) {
         pidusage(child.pid, (err, stats) => {
           if (err) {
@@ -51,46 +110,20 @@ class RuntimeAgain {
             return;
           }
 
-          pidHistory.push(stats);
+          history.push(stats);
         });
       }
     }, 2000);
+  }
 
-    const history = new HistoryLimit<string>(
-      parseInt(process.env.HISTORY_LENGTH ?? "5")
-    );
+  private customStderr(data: any, history: HistoryLimit<string>) {
+    let log = data.toString();
 
-    child.stdout.pipe(process.stdout, { end: false });
+    log = log.replace(/\n$/, "");
 
-    if (child.stderr) {
-      child.stderr.on("data", (data) => {
-        let log = data.toString();
+    history.push(log);
 
-        log = log.replace(/\n$/, "");
-
-        history.push(log);
-
-        console.error(log);
-      });
-    }
-
-    child.on("close", async (code) => {
-      logger(`Exit process with code ${code}`);
-
-      const error = history.get().join("\n");
-
-      logger("--- errors ---");
-      logger(error);
-      logger("--------------");
-
-      appCrashWebhook(error);
-
-      clearInterval(usageInterval);
-
-      this.attempt += 1;
-
-      this.startNode(command, true);
-    });
+    console.error(log);
   }
 }
 
