@@ -19,6 +19,7 @@ export async function appCrashWebhook(params: {
       error: params.error,
       stats: params.stats,
       attempt: params.attempt,
+      monitorId: Number(process.env.MONITOR_ID) ?? -1,
     }),
   };
 

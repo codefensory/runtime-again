@@ -42,7 +42,7 @@ class RuntimeAgain {
 
     // Listen stderr and save history
     const history = new HistoryLimit<string>(
-      parseInt(process.env.HISTORY_LENGTH ?? "5")
+      Number(process.env.HISTORY_LENGTH) ?? 5
     );
     child.stderr.on("data", (data) => this.customStderr(data, history));
 
@@ -65,11 +65,13 @@ class RuntimeAgain {
       logger("-------------");
 
       // send crash to webhooks
-      appCrashWebhook({
-        error,
-        stats: pidHistory.get(),
-        attempt: this.attempt,
-      });
+      if (this.attempt === 0) {
+        appCrashWebhook({
+          error,
+          stats: pidHistory.get(),
+          attempt: this.attempt,
+        });
+      }
 
       // Clear intervals
       clearInterval(statsInterval);
