@@ -15,6 +15,7 @@
   "devDependencies": {
     "@types/debug": "^4.1.7",
     "@types/node": "^18.7.23",
+    "@types/pidusage": "^2.0.2",
     "debug": "^4.3.4",
     "dotenv": "^16.0.2",
     "nodemon": "^2.0.20",
@@ -22,6 +23,7 @@
     "typescript": "^4.8.3"
   },
   "dependencies": {
-    "commander": "^9.4.0"
+    "commander": "^9.4.0",
+    "pidusage": "^3.0.0"
   }
 }

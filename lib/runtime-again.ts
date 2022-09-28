@@ -1,9 +1,28 @@
 import { spawn } from "child_process";
+import { appCrashWebhook } from "./services";
 import { HistoryLimit } from "./utils/historyLimit";
+import debug from "debug";
+import pidusage from "pidusage";
+
+const logger = debug("runtime-again:RuntimeAgain");
+
+export interface Stat {
+  cpu: number;
+  memory: number;
+  ppid: number;
+  pid: number;
+  ctime: number;
+  elapsed: number;
+  timestamp: number;
+}
 
 class RuntimeAgain {
+  private attempt = 0;
+  private maxAttempt = 10;
+  private restartRetryInterval = 5000;
+
   startNode(command: string, isRestart: boolean = false) {
-    console.log(isRestart ? "App restarted" : "App started");
+    logger(isRestart ? "App restarted" : "App started");
 
     const commandSplit = command.split(" ");
 
@@ -21,7 +40,25 @@ class RuntimeAgain {
       ),
     });
 
-    const history = new HistoryLimit<string>(5);
+    const pidHistory = new HistoryLimit<Stat>(60);
+
+    const usageInterval = setInterval(() => {
+      if (child.pid) {
+        pidusage(child.pid, (err, stats) => {
+          if (err) {
+            logger(err.toString());
+
+            return;
+          }
+
+          pidHistory.push(stats);
+        });
+      }
+    }, 2000);
+
+    const history = new HistoryLimit<string>(
+      parseInt(process.env.HISTORY_LENGTH ?? "5")
+    );
 
     child.stdout.pipe(process.stdout, { end: false });
 
@@ -37,12 +74,20 @@ class RuntimeAgain {
       });
     }
 
-    child.on("close", (code) => {
-      console.error(`Exit process with code ${code}`);
+    child.on("close", async (code) => {
+      logger(`Exit process with code ${code}`);
 
-      console.error("--- errors ---");
-      console.error(history.get().join("\n"));
-      console.error("--------------");
+      const error = history.get().join("\n");
+
+      logger("--- errors ---");
+      logger(error);
+      logger("--------------");
+
+      appCrashWebhook(error);
+
+      clearInterval(usageInterval);
+
+      this.attempt += 1;
 
       this.startNode(command, true);
     });
