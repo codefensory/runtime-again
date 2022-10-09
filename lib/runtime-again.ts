@@ -1,8 +1,9 @@
 import { ChildProcessWithoutNullStreams, spawn } from "child_process";
-import { appCrashWebhook } from "./services";
+import { sendAppCrashWebhooks, sendAppUP } from "./services";
 import { HistoryLimit } from "./utils/historyLimit";
 import debug from "debug";
 import pidusage from "pidusage";
+import { AppCrashType } from "./utils/constants";
 
 const logger = debug("runtime-again:RuntimeAgain");
 
@@ -20,7 +21,7 @@ class RuntimeAgain {
   private attempt = 0;
   private maxAttempt = 5;
   // Cooldown time
-  private restartRetryInterval = 60000;
+  private cooldownTime = 60000;
 
   startNode(command: string, isRestart: boolean = false) {
     logger(isRestart ? "App restarted" : "App started");
@@ -55,19 +56,10 @@ class RuntimeAgain {
 
       const error = history.get().join("\n");
 
-      // Print errors
-      logger("--- errors ---");
-      logger(error);
-      logger("--------------");
-
-      // Print stats
-      logger("--- stats ---");
-      logger(JSON.stringify(pidHistory.get(), null, "   "));
-      logger("-------------");
-
       // send crash to webhooks
-      if (this.attempt === 0) {
-        appCrashWebhook({
+      if (this.attempt < this.maxAttempt) {
+        sendAppCrashWebhooks({
+          type: this.attempt === 0 ? AppCrashType.CRASH : AppCrashType.RETRY,
           error,
           stats: pidHistory.get(),
           attempt: this.attempt,
@@ -80,12 +72,21 @@ class RuntimeAgain {
 
       // If it exceeds the maximum number of retries within the predefined time, it goes into cooldown.
       if (this.attempt >= this.maxAttempt) {
+        logger("Waiting cooldown...");
+
+        sendAppCrashWebhooks({
+          type: AppCrashType.COOLDOWN,
+          error,
+          stats: pidHistory.get(),
+          attempt: this.attempt,
+        });
+
         // Wait cooldown time
         setTimeout(() => {
           this.attempt = 0;
 
           this.startNode(command, true);
-        }, this.restartRetryInterval);
+        }, this.cooldownTime);
 
         return;
       }
@@ -97,7 +98,11 @@ class RuntimeAgain {
   }
 
   private restartAttemptsTimeout() {
-    return setTimeout(() => (this.attempt = 0), 20000);
+    return setTimeout(() => {
+      sendAppUP(this.attempt);
+
+      this.attempt = 0;
+    }, 20000);
   }
 
   private startWatchStats(

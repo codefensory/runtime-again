@@ -5,7 +5,10 @@ export class HistoryLimit<T> {
 
   push(item: T) {
     this.history.unshift(item);
-    this.history = this.history.slice(0, this.limit);
+
+    if (this.history.length > this.limit) {
+      this.history.pop();
+    }
   }
 
   get() {
