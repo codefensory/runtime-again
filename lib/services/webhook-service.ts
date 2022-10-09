@@ -23,7 +23,7 @@ export async function sendAppCrashWebhooks(params: {
     }),
   };
 
-  fetchToEndpoints(options);
+  fetchToEndpoints(process.env.APP_CRASH_ENDPOINTS, options);
 }
 
 export async function sendAppUP(attempt: number) {
@@ -37,20 +37,21 @@ export async function sendAppUP(attempt: number) {
     }),
   };
 
-  fetchToEndpoints(options);
+  fetchToEndpoints(process.env.APP_UP_ENDPOINTS, options);
 }
 
-async function fetchToEndpoints(options: RequestInit) {
-  const serversUrl = process.env.APP_CRASH_ENDPOINTS;
-
-  if (!!!serversUrl) {
+async function fetchToEndpoints(
+  serverUrls: string | undefined,
+  options: RequestInit
+) {
+  if (!!!serverUrls) {
     return;
   }
 
   try {
     const fetchs = [];
 
-    const urlsArr = serversUrl.split(";");
+    const urlsArr = serverUrls.split(";");
 
     for (let url of urlsArr) {
       if (!!!url) {
@@ -60,7 +61,7 @@ async function fetchToEndpoints(options: RequestInit) {
       fetchs.push(fetch(url, options));
     }
 
-    await Promise.all(fetchs);
+    return Promise.all(fetchs);
   } catch (err: any) {
     if (err) {
       logger(err.toString());
