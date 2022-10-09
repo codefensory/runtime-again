@@ -19,6 +19,7 @@ export interface Stat {
 class RuntimeAgain {
   private attempt = 0;
   private maxAttempt = 5;
+  // Cooldown time
   private restartRetryInterval = 60000;
 
   startNode(command: string, isRestart: boolean = false) {
@@ -77,7 +78,9 @@ class RuntimeAgain {
       clearInterval(statsInterval);
       clearInterval(restartAttemptsTimeout);
 
+      // If it exceeds the maximum number of retries within the predefined time, it goes into cooldown.
       if (this.attempt >= this.maxAttempt) {
+        // Wait cooldown time
         setTimeout(() => {
           this.attempt = 0;
 

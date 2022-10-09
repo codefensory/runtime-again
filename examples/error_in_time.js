@@ -8,4 +8,4 @@ setTimeout(() => {
   logger("play error");
 
   throw new Error("Ocurrio un problema");
-}, 60000);
+}, 10000);

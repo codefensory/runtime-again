@@ -1,4 +1,7 @@
 import { Stat } from "../runtime-again";
+import debug from "debug";
+
+const logger = debug("runtime-again:services:webhooks-service");
 
 export async function appCrashWebhook(params: {
   error: string;
@@ -13,6 +16,7 @@ export async function appCrashWebhook(params: {
 
   const options = {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       type: "app_crash",
       title: "Application Crash",
@@ -37,9 +41,9 @@ export async function appCrashWebhook(params: {
     }
 
     await Promise.all(fetchs);
-  } catch (err) {
+  } catch (err: any) {
     if (err) {
-      console.error(err.toString());
+      logger(err.toString());
     }
   }
 }
